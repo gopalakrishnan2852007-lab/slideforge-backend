@@ -8,6 +8,13 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// =========================
+// ✅ HEALTH CHECK ROUTE
+// =========================
+app.get("/", (req, res) => {
+  res.send("🚀 SlideForge Backend is Running");
+});
+
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // =========================
@@ -76,7 +83,7 @@ FORMAT:
        "Short, punchy point 3"
      ],
      "speakerNotes": "Detailed presenter explanation.",
-     "imagePrompt": "A highly detailed, aesthetic, photorealistic image representing concept",
+     "imagePrompt": "A highly detailed, aesthetic image",
      "icon": "🚀"
    }
  ]
@@ -119,7 +126,6 @@ app.post("/download-ppt", async (req, res) => {
     slidesWithImages.forEach((slide) => {
       const s = pptx.addSlide();
 
-      // ===== MODERN =====
       if (template === "modern") {
         s.background = { fill: "1E1B4B" };
 
@@ -153,10 +159,7 @@ app.post("/download-ppt", async (req, res) => {
           color: "E0E7FF",
           bullet: true,
         });
-      }
-
-      // ===== BUSINESS =====
-      else if (template === "business") {
+      } else if (template === "business") {
         s.background = { fill: "FFFFFF" };
 
         s.addText(`${slide.icon} ${slide.heading}`, {
@@ -186,10 +189,7 @@ app.post("/download-ppt", async (req, res) => {
             h: 3.2,
           });
         }
-      }
-
-      // ===== ACADEMIC =====
-      else {
+      } else {
         s.background = { fill: "F8FAFC" };
 
         s.addText(`${slide.icon} ${slide.heading}`, {
@@ -247,7 +247,7 @@ app.post("/download-ppt", async (req, res) => {
 });
 
 // =========================
-// ✅ RENDER PORT FIX (IMPORTANT)
+// ✅ RENDER PORT FIX
 // =========================
 const PORT = process.env.PORT || 5000;
 
