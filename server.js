@@ -133,80 +133,76 @@ app.post("/download-ppt", async (req, res) => {
       }
 
       // ============================================
-      // 1. MODERN THEME (Dark, Sleek, Edge-to-Edge)
+      // 1. MODERN THEME (Neon, Layered Geometry, Dark Mode)
       // ============================================
       if (template === "modern") {
-        s.background = { fill: "09090B" }; // Deep Slate/Black
+        s.background = { fill: "09090B" }; // Deep Midnight Black
+
+        // Aesthetic background glow effect (purple circular overlay)
+        s.addShape(pptx.ShapeType.oval, {
+          x: -1, y: -1, w: 5, h: 5,
+          fill: { color: "6B21A8", transparency: 85 },
+        });
 
         // Neon Pink Accent Line
         s.addShape(pptx.ShapeType.rect, {
-          x: 0.6,
-          y: 1.2,
-          w: 0.6,
-          h: 0.05,
+          x: 0.6, y: 0.8, w: 0.8, h: 0.05,
           fill: { color: "EC4899" },
         });
 
-        // Fixed Gap: Heading (y: 1.5) immediately followed by points (y: 2.3)
+        // FIX: High 'h' for heading prevents overlapping. Y=1.0.
         s.addText(`${slide.heading}`, {
-          x: 0.6,
-          y: 1.5,
-          w: 4.4,
-          h: 0.8,
-          fontSize: 36,
+          x: 0.6, y: 1.0, w: 4.4, h: 1.4,
+          fontSize: 34,
           bold: true,
           color: "FFFFFF",
           fontFace: "Arial",
-          valign: "top", // Forces text to top, preventing gaps
+          valign: "top", // Locks to top of the 1.4h box
         });
 
+        // FIX: Points start at Y=2.5, leaving a perfect gap
         s.addText(slide.points.join("\n"), {
-          x: 0.6,
-          y: 2.4, // Tight spacing to the heading
-          w: 4.4,
-          h: 2.5,
+          x: 0.6, y: 2.5, w: 4.4, h: 2.5,
           fontSize: 18,
           color: "D1D5DB",
           fontFace: "Arial",
           valign: "top",
           bullet: { type: "bullet", color: "EC4899" },
-          lineSpacing: 32,
+          lineSpacing: 34,
         });
 
-        // Edge-to-Edge Image on Right Side
+        // Image with soft rounded styling layout
         if (slide.base64Image) {
           s.addImage({
             data: slide.base64Image,
-            x: 5.5,
-            y: 0,
-            w: 4.5,
-            h: 5.625,
-            sizing: { type: "crop", w: 4.5, h: 5.625 },
+            x: 5.5, y: 0.5, w: 4.0, h: 4.6,
+            sizing: { type: "crop", w: 4.0, h: 4.6 },
+            rounding: true, // Modern rounded corners
           });
         }
       } 
       
       // ============================================
-      // 2. BUSINESS THEME (Executive Navy, Clean Lines)
+      // 2. BUSINESS THEME (Glassmorphism, Corporate Gold & Navy)
       // ============================================
       else if (template === "business") {
-        s.background = { fill: "0B101E" }; // Dark Navy Executive bg
+        s.background = { fill: "050F24" }; // Ultra Dark Corporate Navy
 
-        // Left Architectural Blue Bar
+        // Layered Content Box (Simulates glass/card background)
         s.addShape(pptx.ShapeType.rect, {
-          x: 0,
-          y: 0,
-          w: 0.15,
-          h: "100%",
-          fill: { color: "2563EB" },
+          x: 0.4, y: 0.5, w: 4.8, h: 4.6,
+          fill: { color: "132342", transparency: 20 },
         });
 
-        // Fixed Gap Configuration
+        // Gold Accent Border attached to the content box
+        s.addShape(pptx.ShapeType.rect, {
+          x: 0.4, y: 0.5, w: 0.06, h: 4.6,
+          fill: { color: "F59E0B" }, // Premium Gold
+        });
+
+        // FIX: Safely contained heading inside the box
         s.addText(`${slide.heading}`, {
-          x: 0.8,
-          y: 1.5,
-          w: 4.5,
-          h: 0.8,
+          x: 0.8, y: 0.8, w: 4.2, h: 1.4,
           fontSize: 32,
           bold: true,
           color: "FFFFFF",
@@ -214,102 +210,92 @@ app.post("/download-ppt", async (req, res) => {
           valign: "top",
         });
 
+        // FIX: Perfect gap before bullets
         s.addText(slide.points.join("\n"), {
-          x: 0.8,
-          y: 2.4,
-          w: 4.5,
-          h: 2.5,
+          x: 0.8, y: 2.3, w: 4.2, h: 2.6,
           fontSize: 16,
           color: "9CA3AF",
           fontFace: "Calibri",
           valign: "top",
-          bullet: { type: "number", color: "3B82F6" },
-          lineSpacing: 28,
+          bullet: { type: "number", color: "F59E0B" }, // Gold numbers
+          lineSpacing: 30,
         });
 
-        // Slide Number Watermark
-        s.addText(`SLIDE / 0${index + 1}`, {
-          x: 8.0,
-          y: 5.1,
-          w: 1.5,
-          h: 0.3,
+        // Elegant Bottom Footer Line & Number
+        s.addShape(pptx.ShapeType.rect, {
+          x: 5.8, y: 5.0, w: 3.6, h: 0.01,
+          fill: { color: "3B82F6", transparency: 50 },
+        });
+        
+        s.addText(`SLIDE 0${index + 1}`, {
+          x: 8.0, y: 5.1, w: 1.5, h: 0.3,
           fontSize: 10,
-          color: "4B5563",
+          color: "60A5FA",
           fontFace: "Courier New",
           align: "right",
         });
 
-        // Professional Square Image Crop
+        // Corporate Square Image with simulated gold border backing
         if (slide.base64Image) {
+          // Fake border shadow behind image
+          s.addShape(pptx.ShapeType.rect, {
+            x: 5.75, y: 0.95, w: 3.7, h: 3.7,
+            fill: { color: "F59E0B" },
+          });
+          // Actual Image
           s.addImage({
             data: slide.base64Image,
-            x: 5.8,
-            y: 1.0,
-            w: 3.6,
-            h: 3.6,
+            x: 5.8, y: 1.0, w: 3.6, h: 3.6,
             sizing: { type: "crop", w: 3.6, h: 3.6 },
           });
         }
       } 
       
       // ============================================
-      // 3. ACADEMIC THEME (Ivory, Serif Fonts, Academic Lines)
+      // 3. ACADEMIC THEME (Ivy League Borders, Ivory Paper, Drop Shadows)
       // ============================================
       else {
-        s.background = { fill: "FDFBF7" }; // Ivory/Cream Paper
+        s.background = { fill: "FDFBF7" }; // Textured Ivory Paper Look
 
-        // Top Oxford Blue Header Bar
+        // Academic Frame Border (Thin Navy line around the whole slide)
         s.addShape(pptx.ShapeType.rect, {
-          x: 0,
-          y: 0,
-          w: "100%",
-          h: 0.2,
-          fill: { color: "1A2E44" },
+          x: 0.2, y: 0.2, w: 9.6, h: 5.25,
+          line: { color: "1A2E44", width: 1.5 },
+          fill: { type: "none" }, // Transparent inside
         });
 
-        // Crimson Red Sub-line
+        // Top Header Divider Line
         s.addShape(pptx.ShapeType.rect, {
-          x: 0,
-          y: 0.2,
-          w: "100%",
-          h: 0.02,
-          fill: { color: "8B1E0F" },
+          x: 0.2, y: 1.0, w: 9.6, h: 0.02,
+          fill: { color: "8B1E0F" }, // Crimson Red
         });
 
-        // Serif Fonts with fixed tight gaps
+        // FIX: Heading is placed beautifully in the top segment
         s.addText(`${slide.heading}`, {
-          x: 0.6,
-          y: 1.4,
-          w: 4.5,
-          h: 1.0,
-          fontSize: 34,
+          x: 0.5, y: 0.35, w: 9.0, h: 0.6,
+          fontSize: 32,
           bold: true,
           color: "1A2E44",
           fontFace: "Georgia",
-          valign: "top",
+          valign: "middle",
         });
 
+        // FIX: Bullet points sit cleanly in the main body area
         s.addText(slide.points.join("\n"), {
-          x: 0.6,
-          y: 2.4,
-          w: 4.5,
-          h: 2.5,
-          fontSize: 17,
+          x: 0.6, y: 1.5, w: 4.4, h: 3.5,
+          fontSize: 18,
           color: "334155",
           fontFace: "Georgia",
           valign: "top",
           bullet: { type: "bullet", characterCode: "2022", color: "8B1E0F" },
-          lineSpacing: 30,
+          lineSpacing: 34,
         });
 
         // Roman Numeral Subtle Watermark
         const romanNumerals = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII"];
         s.addText(romanNumerals[index] || index + 1, {
-          x: 8.5,
-          y: 0.5,
-          w: 1.0,
-          h: 1.0,
-          fontSize: 64,
+          x: 8.5, y: 4.3, w: 1.0, h: 1.0,
+          fontSize: 48,
           bold: true,
           italic: true,
           color: "E5E0D8", // Very subtle gray-brown
@@ -317,15 +303,18 @@ app.post("/download-ppt", async (req, res) => {
           align: "right",
         });
 
-        // Landscape Photo Frame
+        // Elegant Image with simulated Drop Shadow effect
         if (slide.base64Image) {
+          // Grey shadow box offset behind image
+          s.addShape(pptx.ShapeType.rect, {
+            x: 5.6, y: 1.6, w: 3.8, h: 2.8,
+            fill: { color: "D1D5DB" }, // Shadow color
+          });
+          // Actual Image
           s.addImage({
             data: slide.base64Image,
-            x: 5.5,
-            y: 1.6,
-            w: 4.0,
-            h: 2.8,
-            sizing: { type: "crop", w: 4.0, h: 2.8 },
+            x: 5.5, y: 1.5, w: 3.8, h: 2.8,
+            sizing: { type: "crop", w: 3.8, h: 2.8 },
           });
         }
       }
