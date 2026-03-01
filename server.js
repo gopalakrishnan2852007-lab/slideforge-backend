@@ -12,7 +12,7 @@ app.use(express.json());
 // ✅ HEALTH CHECK ROUTE
 // =========================
 app.get("/", (req, res) => {
-  res.send("🚀 SlideForge Backend is Running");
+  res.send("🚀 Premium SlideForge Backend is Running");
 });
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -36,9 +36,9 @@ const fetchImageBase64 = async (prompt) => {
   try {
     const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(
       prompt
-    )}?width=800&height=800&nologo=true`;
+    )}?width=1024&height=1024&nologo=true`;
 
-    const response = await fetch(url);
+    const response = await fetch(url, { timeout: 10000 }); // 10 sec timeout
     if (!response.ok) return null;
 
     const arrayBuffer = await response.arrayBuffer();
@@ -47,7 +47,7 @@ const fetchImageBase64 = async (prompt) => {
     return `data:image/jpeg;base64,${buffer.toString("base64")}`;
   } catch (error) {
     console.error("Image Fetch Error:", error.message);
-    return null;
+    return null; // Return null so PPT still generates without the image
   }
 };
 
@@ -58,15 +58,14 @@ app.post("/generate-json", async (req, res) => {
   try {
     const { topic } = req.body;
 
-    if (!topic)
-      return res.status(400).json({ error: "Topic required" });
+    if (!topic) return res.status(400).json({ error: "Topic required" });
 
     const model = genAI.getGenerativeModel({
       model: "gemini-2.5-flash",
     });
 
     const prompt = `
-You are an expert presentation designer. Create a premium 6-slide presentation about "${topic}".
+You are an expert executive presentation designer. Create a premium 6-slide presentation about "${topic}".
 
 IMPORTANT:
 Return ONLY valid JSON. No markdown, no backticks, no explanation.
@@ -78,21 +77,22 @@ FORMAT:
    {
      "heading": "Short Title Here",
      "points": [
-       "Short, punchy point 1",
-       "Short, punchy point 2",
-       "Short, punchy point 3"
+       "Punchy, high-impact point 1",
+       "Punchy, high-impact point 2",
+       "Punchy, high-impact point 3"
      ],
-     "speakerNotes": "Detailed presenter explanation.",
-     "imagePrompt": "A highly detailed, aesthetic image",
+     "speakerNotes": "Detailed presenter explanation to be read aloud during the presentation.",
+     "imagePrompt": "A highly detailed, professional, cinematic aesthetic image representing [slide context]",
      "icon": "🚀"
    }
  ]
 }
 
 Rules:
-1. Heading max 5 words.
-2. Bullet max 10 words.
-3. Return pure JSON only.
+1. Heading max 5-7 words.
+2. Bullet max 12 words.
+3. Keep speakerNotes strictly professional and descriptive.
+4. Return pure JSON only.
 `;
 
     const result = await model.generateContent(prompt);
@@ -107,15 +107,16 @@ Rules:
 });
 
 // =========================
-// DOWNLOAD PPT
+// DOWNLOAD PPT (PREMIUM THEMES)
 // =========================
 app.post("/download-ppt", async (req, res) => {
   try {
     const { data, template } = req.body;
 
     const pptx = new PptxGenJS();
-    pptx.layout = "LAYOUT_16x9";
+    pptx.layout = "LAYOUT_16x9"; // W: 10 inches, H: 5.625 inches
 
+    // Fetch images in parallel for speed
     const slidesWithImages = await Promise.all(
       data.slides.map(async (slide) => {
         const base64Image = await fetchImageBase64(slide.imagePrompt);
@@ -123,12 +124,56 @@ app.post("/download-ppt", async (req, res) => {
       })
     );
 
-    slidesWithImages.forEach((slide) => {
+    slidesWithImages.forEach((slide, index) => {
       const s = pptx.addSlide();
 
-      if (template === "modern") {
-        s.background = { fill: "1E1B4B" };
+      // Ensure Speaker Notes are added to EVERY slide
+      if (slide.speakerNotes) {
+        s.addNotes(slide.speakerNotes);
+      }
 
+      // ============================================
+      // 1. MODERN THEME (Dark, Sleek, Edge-to-Edge)
+      // ============================================
+      if (template === "modern") {
+        s.background = { fill: "09090B" }; // Deep Slate/Black
+
+        // Neon Pink Accent Line
+        s.addShape(pptx.ShapeType.rect, {
+          x: 0.6,
+          y: 1.2,
+          w: 0.6,
+          h: 0.05,
+          fill: { color: "EC4899" },
+        });
+
+        // Fixed Gap: Heading (y: 1.5) immediately followed by points (y: 2.3)
+        s.addText(`${slide.heading}`, {
+          x: 0.6,
+          y: 1.5,
+          w: 4.4,
+          h: 0.8,
+          fontSize: 36,
+          bold: true,
+          color: "FFFFFF",
+          fontFace: "Arial",
+          valign: "top", // Forces text to top, preventing gaps
+        });
+
+        s.addText(slide.points.join("\n"), {
+          x: 0.6,
+          y: 2.4, // Tight spacing to the heading
+          w: 4.4,
+          h: 2.5,
+          fontSize: 18,
+          color: "D1D5DB",
+          fontFace: "Arial",
+          valign: "top",
+          bullet: { type: "bullet", color: "EC4899" },
+          lineSpacing: 32,
+        });
+
+        // Edge-to-Edge Image on Right Side
         if (slide.base64Image) {
           s.addImage({
             data: slide.base64Image,
@@ -136,94 +181,153 @@ app.post("/download-ppt", async (req, res) => {
             y: 0,
             w: 4.5,
             h: 5.625,
+            sizing: { type: "crop", w: 4.5, h: 5.625 },
           });
         }
+      } 
+      
+      // ============================================
+      // 2. BUSINESS THEME (Executive Navy, Clean Lines)
+      // ============================================
+      else if (template === "business") {
+        s.background = { fill: "0B101E" }; // Dark Navy Executive bg
 
-        s.addText(`${slide.icon} ${slide.heading}`, {
-          x: 0.5,
-          y: 0.4,
+        // Left Architectural Blue Bar
+        s.addShape(pptx.ShapeType.rect, {
+          x: 0,
+          y: 0,
+          w: 0.15,
+          h: "100%",
+          fill: { color: "2563EB" },
+        });
+
+        // Fixed Gap Configuration
+        s.addText(`${slide.heading}`, {
+          x: 0.8,
+          y: 1.5,
           w: 4.5,
-          h: 1.8,
+          h: 0.8,
           fontSize: 32,
           bold: true,
           color: "FFFFFF",
+          fontFace: "Calibri",
           valign: "top",
         });
 
         s.addText(slide.points.join("\n"), {
-          x: 0.5,
-          y: 2.3,
+          x: 0.8,
+          y: 2.4,
           w: 4.5,
-          h: 3,
-          fontSize: 18,
-          color: "E0E7FF",
-          bullet: true,
-        });
-      } else if (template === "business") {
-        s.background = { fill: "FFFFFF" };
-
-        s.addText(`${slide.icon} ${slide.heading}`, {
-          x: 0.5,
-          y: 0.5,
-          w: 9,
-          h: 1,
-          fontSize: 32,
-          bold: true,
+          h: 2.5,
+          fontSize: 16,
+          color: "9CA3AF",
+          fontFace: "Calibri",
+          valign: "top",
+          bullet: { type: "number", color: "3B82F6" },
+          lineSpacing: 28,
         });
 
-        s.addText(slide.points.join("\n"), {
-          x: 0.5,
-          y: 1.6,
-          w: 5,
-          h: 3.5,
-          fontSize: 18,
-          bullet: { type: "number" },
+        // Slide Number Watermark
+        s.addText(`SLIDE / 0${index + 1}`, {
+          x: 8.0,
+          y: 5.1,
+          w: 1.5,
+          h: 0.3,
+          fontSize: 10,
+          color: "4B5563",
+          fontFace: "Courier New",
+          align: "right",
         });
 
+        // Professional Square Image Crop
         if (slide.base64Image) {
           s.addImage({
             data: slide.base64Image,
-            x: 6,
-            y: 1.8,
-            w: 3.2,
-            h: 3.2,
+            x: 5.8,
+            y: 1.0,
+            w: 3.6,
+            h: 3.6,
+            sizing: { type: "crop", w: 3.6, h: 3.6 },
           });
         }
-      } else {
-        s.background = { fill: "F8FAFC" };
+      } 
+      
+      // ============================================
+      // 3. ACADEMIC THEME (Ivory, Serif Fonts, Academic Lines)
+      // ============================================
+      else {
+        s.background = { fill: "FDFBF7" }; // Ivory/Cream Paper
 
-        s.addText(`${slide.icon} ${slide.heading}`, {
-          x: 0.5,
-          y: 0.5,
-          w: 9,
-          h: 1,
+        // Top Oxford Blue Header Bar
+        s.addShape(pptx.ShapeType.rect, {
+          x: 0,
+          y: 0,
+          w: "100%",
+          h: 0.2,
+          fill: { color: "1A2E44" },
+        });
+
+        // Crimson Red Sub-line
+        s.addShape(pptx.ShapeType.rect, {
+          x: 0,
+          y: 0.2,
+          w: "100%",
+          h: 0.02,
+          fill: { color: "8B1E0F" },
+        });
+
+        // Serif Fonts with fixed tight gaps
+        s.addText(`${slide.heading}`, {
+          x: 0.6,
+          y: 1.4,
+          w: 4.5,
+          h: 1.0,
           fontSize: 34,
           bold: true,
-          align: "center",
+          color: "1A2E44",
+          fontFace: "Georgia",
+          valign: "top",
         });
 
         s.addText(slide.points.join("\n"), {
-          x: 0.5,
-          y: 1.8,
+          x: 0.6,
+          y: 2.4,
           w: 4.5,
-          h: 3,
-          fontSize: 18,
-          bullet: true,
+          h: 2.5,
+          fontSize: 17,
+          color: "334155",
+          fontFace: "Georgia",
+          valign: "top",
+          bullet: { type: "bullet", characterCode: "2022", color: "8B1E0F" },
+          lineSpacing: 30,
         });
 
+        // Roman Numeral Subtle Watermark
+        const romanNumerals = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII"];
+        s.addText(romanNumerals[index] || index + 1, {
+          x: 8.5,
+          y: 0.5,
+          w: 1.0,
+          h: 1.0,
+          fontSize: 64,
+          bold: true,
+          italic: true,
+          color: "E5E0D8", // Very subtle gray-brown
+          fontFace: "Georgia",
+          align: "right",
+        });
+
+        // Landscape Photo Frame
         if (slide.base64Image) {
           s.addImage({
             data: slide.base64Image,
-            x: 5.2,
-            y: 1.8,
-            w: 4,
-            h: 3,
+            x: 5.5,
+            y: 1.6,
+            w: 4.0,
+            h: 2.8,
+            sizing: { type: "crop", w: 4.0, h: 2.8 },
           });
         }
-      }
-
-      if (slide.speakerNotes) {
-        s.addNotes(slide.speakerNotes);
       }
     });
 
@@ -236,7 +340,7 @@ app.post("/download-ppt", async (req, res) => {
 
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename=${data.title.replace(/[^a-z0-9]/gi, "_")}.pptx`
+      `attachment; filename="${data.title.replace(/[^a-z0-9]/gi, "_")}.pptx"`
     );
 
     res.send(buffer);
