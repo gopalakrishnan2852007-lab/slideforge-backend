@@ -15,8 +15,7 @@ app.get("/", (req, res) => {
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// ================= TEXT CLEANER (FIXES THE ** BUG) =================
-// This completely strips out unwanted markdown like **, _, or *
+// ================= TEXT CLEANER (REMOVES **) =================
 const cleanText = (text) => {
   if (!text) return "";
   return text.replace(/\*\*/g, "").replace(/\*/g, "").replace(/_/g, "").trim();
@@ -66,16 +65,15 @@ app.post("/generate-json", async (req, res) => {
 
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-    // STRICT PROMPT: Stops the AI from using Markdown and forces short text
+    // STRICT PROMPT: Forces incredibly short text and NO markdown.
     const prompt = `
-You are a world-class executive designer for Apple and Stripe. Create an Ultra-Premium 6-slide presentation about "${topic}".
+You are a world-class presentation designer. Create a 6-slide executive deck about "${topic}".
 
 CRITICAL RULES:
-1. NO MARKDOWN. NEVER use **asterisks**, bolding, or italics anywhere.
-2. "heading" MUST be under 5 words.
-3. "points" MUST be exactly 3 bullet points. Each point MUST be strictly under 12 words.
-4. Keep speaker notes detailed and professional.
-5. Return ONLY valid JSON.
+1. NO MARKDOWN ALLOWED. Do not use ** or * anywhere.
+2. "heading" MUST be extremely short (Max 4 words).
+3. "points" MUST be exactly 3 bullet points. Max 10 words per point.
+4. Return ONLY valid JSON.
 
 FORMAT:
 {
@@ -83,10 +81,10 @@ FORMAT:
  "slides":[
   {
    "type":"intro | content | image | summary",
-   "heading":"Short heading",
-   "points":["Clean point 1", "Clean point 2", "Clean point 3"],
-   "speakerNotes":"Detailed explanation",
-   "imagePrompt":"Cinematic, highly detailed, photorealistic corporate image of [subject]"
+   "heading":"Short Heading",
+   "points":["Point one is short", "Point two is short", "Point three is short"],
+   "speakerNotes":"Detailed explanation for the presenter to read.",
+   "imagePrompt":"Cinematic corporate image of [subject]"
   }
  ]
 }
@@ -102,7 +100,7 @@ FORMAT:
   }
 });
 
-// ================= GOD LEVEL PPT GENERATION =================
+// ================= THE FLAWLESS PPT ENGINE =================
 app.post("/download-ppt", async (req, res) => {
   try {
     const { data } = req.body;
@@ -112,8 +110,9 @@ app.post("/download-ppt", async (req, res) => {
     }
 
     const pptx = new PptxGenJS();
-    pptx.layout = "LAYOUT_16x9"; // 10 x 5.625 inches
+    pptx.layout = "LAYOUT_16x9"; // 10 inches wide, 5.625 inches high
 
+    // Parallel Image Fetching
     const slides = await Promise.all(
       data.slides.map(async (s) => ({
         ...s,
@@ -122,27 +121,25 @@ app.post("/download-ppt", async (req, res) => {
     );
 
     // ==========================================
-    // COVER SLIDE (Cinematic Intro)
+    // COVER SLIDE
     // ==========================================
     const cover = pptx.addSlide();
-    cover.background = { fill: "050505" }; // Pure deep space obsidian
+    cover.background = { fill: "0A0A0A" }; // Ultra Dark Charcoal
 
-    // Glowing Neon Accent Top Line
-    cover.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: "100%", h: 0.1, fill: { color: "6366F1" } }); 
-
-    // Abstract left block
-    cover.addShape(pptx.ShapeType.rect, { x: 1, y: 1.5, w: 0.1, h: 2.5, fill: { color: "06B6D4" } }); 
+    // Sleek God-Level Accent Lines
+    cover.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: "100%", h: 0.15, fill: { color: "00E5FF" } }); // Top Cyan Bar
+    cover.addShape(pptx.ShapeType.rect, { x: 0.8, y: 1.5, w: 0.08, h: 2.5, fill: { color: "2563EB" } }); // Left Blue Bar
 
     const safeTitle = cleanText(data.title || "Executive Briefing").toUpperCase();
 
     cover.addText(safeTitle, {
-      x: 1.3, y: 1.5, w: 8, h: 2,
-      fontSize: 48, bold: true, color: "FFFFFF", fontFace: "Helvetica Neue", valign: "middle",
+      x: 1.2, y: 1.5, w: 8, h: 2.0,
+      fontSize: 48, bold: true, color: "FFFFFF", fontFace: "Arial", valign: "middle"
     });
 
-    cover.addText("SLIDEFORGE AI • STRATEGIC OVERVIEW", {
-      x: 1.3, y: 3.6, w: 8, h: 0.5,
-      fontSize: 12, bold: true, color: "64748B", fontFace: "Courier New", tracking: 3
+    cover.addText("CONFIDENTIAL STRATEGY DECK", {
+      x: 1.2, y: 3.8, w: 8, h: 0.5,
+      fontSize: 12, bold: true, color: "94A3B8", fontFace: "Arial", tracking: 3
     });
 
     // ==========================================
@@ -151,103 +148,97 @@ app.post("/download-ppt", async (req, res) => {
     slides.forEach((slide, index) => {
       const s = pptx.addSlide();
       const layout = slide.type || "content";
+      
       const headingText = cleanText(slide.heading || "");
-      const pointsArray = (slide.points || []).map(cleanText); // Cleans all bullet points
+      const pointsArray = (slide.points || []).map(cleanText);
 
       if (slide.speakerNotes) s.addNotes(cleanText(slide.speakerNotes));
 
-      // Global Slide Master Aesthetics (Applies to all content slides)
+      // Global Master Background
       if (layout !== "image") {
-        s.background = { fill: "0B0F19" }; // Rich dark slate
-        // Global subtle footer line
-        s.addShape(pptx.ShapeType.rect, { x: 0, y: 5.3, w: "100%", h: 0.02, fill: { color: "1E293B" } });
-        // Slide number
-        s.addText(`0${index + 1}`, { x: 9.0, y: 5.1, w: 0.5, h: 0.3, fontSize: 10, color: "475569", fontFace: "Helvetica Neue", align: "right" });
+        s.background = { fill: "0F111A" }; // Deep Executive Slate
+        s.addText(`0${index + 1}`, { x: 9.0, y: 5.1, w: 0.5, h: 0.3, fontSize: 10, color: "475569", fontFace: "Arial", align: "right" });
       }
 
       // ===== 1. INTRO SLIDE =====
       if (layout === "intro") {
-        s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 0.15, h: "100%", fill: { color: "6366F1" } }); // Left Indigo Bar
-
         s.addText(headingText, {
-          x: 1, y: 1.2, w: 8, h: 1,
-          fontSize: 40, bold: true, color: "FFFFFF", fontFace: "Helvetica Neue", valign: "top"
+          x: 1, y: 1.0, w: 8, h: 1.2,
+          fontSize: 42, bold: true, color: "FFFFFF", fontFace: "Arial", valign: "top"
         });
 
         s.addText(pointsArray.join("\n\n"), {
-          x: 1, y: 2.5, w: 8, h: 2,
-          fontSize: 22, color: "94A3B8", fontFace: "Helvetica Neue", valign: "top", lineSpacing: 34
+          x: 1, y: 2.5, w: 8, h: 2.5,
+          fontSize: 24, color: "CBD5E1", fontFace: "Arial", valign: "top"
         });
       }
 
-      // ===== 2. CORE CONTENT SLIDE (FIXED SPACING & OVERLAPPING) =====
+      // ===== 2. CORE CONTENT (THE STRICT GRID FIX) =====
       else if (layout === "content") {
-        // STRICT TOP BOUNDARY FOR HEADING (Will never overlap bullets)
+        
+        // 1. HEADING BOX (Locked from Y: 0.5 to 1.7. Huge room, will never hit the line)
         s.addText(headingText, {
-          x: 0.6, y: 0.6, w: 5.0, h: 0.8,
-          fontSize: 34, bold: true, color: "FFFFFF", fontFace: "Helvetica Neue", valign: "top"
+          x: 0.6, y: 0.5, w: 4.8, h: 1.2,
+          fontSize: 36, bold: true, color: "FFFFFF", fontFace: "Arial", valign: "top"
         });
 
-        // Elegant Divider Line
-        s.addShape(pptx.ShapeType.rect, { x: 0.6, y: 1.5, w: 1.0, h: 0.03, fill: { color: "06B6D4" } }); // Cyan line
+        // 2. THE DIVIDER LINE (Locked at Y: 1.8. Safely below the heading)
+        s.addShape(pptx.ShapeType.rect, { x: 0.6, y: 1.8, w: 1.2, h: 0.04, fill: { color: "00E5FF" } });
 
-        // STRICT LOWER BOUNDARY FOR BULLETS
+        // 3. THE BULLET POINTS (Locked from Y: 2.1 down. Flawless standard bullets)
         s.addText(pointsArray.join("\n"), {
-          x: 0.6, y: 1.8, w: 5.0, h: 3.2,
-          fontSize: 18, color: "CBD5E1", fontFace: "Helvetica Neue", valign: "top",
-          bullet: { type: "bullet", color: "6366F1" }, // Custom Indigo bullets
-          lineSpacing: 36 // Perfect gap between points
+          x: 0.6, y: 2.1, w: 4.8, h: 3.0,
+          fontSize: 20, color: "E2E8F0", fontFace: "Arial", valign: "top",
+          bullet: true, // Uses standard, unbreakable PowerPoint bullets
+          lineSpacing: 44 // Perfect spacing between lines
         });
 
-        // Premium Right-Side Image Framing
+        // 4. THE IMAGE (Right Side)
         if (slide.base64Image) {
-          // Subtle drop shadow box behind image
-          s.addShape(pptx.ShapeType.rect, { x: 5.95, y: 0.75, w: 3.6, h: 4.0, fill: { color: "6366F1", transparency: 20 } });
-          // The actual image
+          // Elegant Blue back-shadow
+          s.addShape(pptx.ShapeType.rect, { x: 5.8, y: 1.1, w: 3.8, h: 3.8, fill: { color: "2563EB" } });
+          
           s.addImage({
             data: slide.base64Image,
-            x: 5.8, y: 0.6, w: 3.6, h: 4.0,
-            sizing: { type: "crop", w: 3.6, h: 4.0 }
+            x: 5.6, y: 0.9, w: 3.8, h: 3.8,
+            sizing: { type: "crop", w: 3.8, h: 3.8 }
           });
         }
       }
 
-      // ===== 3. CINEMATIC IMAGE SLIDE =====
+      // ===== 3. FULL BLEED IMAGE SLIDE =====
       else if (layout === "image") {
         s.background = { fill: "000000" };
 
         if (slide.base64Image) {
-          // Full bleed image covering entire slide
           s.addImage({ data: slide.base64Image, x: 0, y: 0, w: 10, h: 5.625, sizing: { type: "crop", w: 10, h: 5.625 } });
         }
 
-        // Dark gradient overlay at bottom for text readability
-        s.addShape(pptx.ShapeType.rect, { x: 0, y: 3.8, w: 10, h: 1.825, fill: { color: "000000", transparency: 30 } });
+        s.addShape(pptx.ShapeType.rect, { x: 0, y: 4.0, w: 10, h: 1.625, fill: { color: "000000", transparency: 40 } });
 
         s.addText(headingText, {
-          x: 0.5, y: 4.2, w: 9, h: 1,
-          fontSize: 36, bold: true, color: "FFFFFF", fontFace: "Helvetica Neue", align: "center", shadow: { type: "outer", opacity: 0.8 }
+          x: 0.5, y: 4.3, w: 9, h: 1,
+          fontSize: 36, bold: true, color: "FFFFFF", fontFace: "Arial", align: "center"
         });
       }
 
-      // ===== 4. SUMMARY / KEY TAKEAWAYS =====
+      // ===== 4. SUMMARY SLIDE =====
       else {
-        s.background = { fill: "F8FAFC" }; // Bright contrast for finale
+        s.background = { fill: "FFFFFF" }; // Bright white finale
 
-        // Executive Light Theme Layout
-        s.addShape(pptx.ShapeType.rect, { x: 1, y: 0, w: 8, h: 0.1, fill: { color: "06B6D4" } });
+        s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: "100%", h: 0.15, fill: { color: "2563EB" } });
 
-        s.addText("KEY TAKEAWAYS", {
-          x: 1.5, y: 0.8, w: 7, h: 0.6,
-          fontSize: 24, bold: true, color: "0F172A", fontFace: "Helvetica Neue", align: "center", tracking: 2
+        s.addText("EXECUTIVE SUMMARY", {
+          x: 1.5, y: 0.8, w: 7, h: 0.8,
+          fontSize: 28, bold: true, color: "0F172A", fontFace: "Arial", align: "center", tracking: 2
         });
 
-        s.addShape(pptx.ShapeType.rect, { x: 4.5, y: 1.5, w: 1.0, h: 0.02, fill: { color: "6366F1" } }); // Centered divider
+        s.addShape(pptx.ShapeType.rect, { x: 4.5, y: 1.6, w: 1.0, h: 0.04, fill: { color: "00E5FF" } });
 
         s.addText(pointsArray.join("\n"), {
-          x: 1.5, y: 2.0, w: 7, h: 2.5,
-          fontSize: 20, color: "334155", fontFace: "Helvetica Neue", valign: "top", align: "center",
-          bullet: { type: "bullet", color: "6366F1" }, lineSpacing: 40
+          x: 1.5, y: 2.1, w: 7, h: 2.5,
+          fontSize: 22, color: "334155", fontFace: "Arial", valign: "top", align: "center",
+          bullet: true, lineSpacing: 48
         });
       }
     });
@@ -276,5 +267,5 @@ app.post("/download-ppt", async (req, res) => {
 // ================= PORT =================
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () =>
-  console.log(`🔥 SlideForge Ultra Premium running on ${PORT}`)
+  console.log(`🔥 SlideForge God-Level Backend running on ${PORT}`)
 );
