@@ -102,6 +102,7 @@ FORMAT:
     const parsedData = extractJSON(await result.response.text());
     res.json(parsedData);
   } catch (err) {
+    console.error("Generate Error:", err);
     res.status(500).json({ error: "AI Generation failed. Please try again." });
   }
 });
@@ -136,6 +137,7 @@ FORMAT:
     const parsedData = extractJSON(await result.response.text());
     res.json(parsedData);
   } catch (err) {
+    console.error("Improve Error:", err);
     res.status(500).json({ error: "Failed to improve slide." });
   }
 });
@@ -147,7 +149,9 @@ app.post("/download-ppt", async (req, res) => {
   try {
     const { data, template } = req.body;
     const activeTheme = template || "modern";
-    if (!data || !Array.isArray(data.slides)) return res.status(400).json({ error: "Invalid slide data." });
+    if (!data || !Array.isArray(data.slides)) {
+      return res.status(400).json({ error: "Invalid slide data." });
+    }
 
     const pptx = new PptxGenJS();
     pptx.layout = "LAYOUT_16x9";
@@ -223,10 +227,15 @@ app.post("/download-ppt", async (req, res) => {
     });
 
     const buffer = await pptx.write("nodebuffer");
+    
+    // ✅ THE FIX: Added fileName variable definition back!
+    const fileName = safeTitle.replace(/[^a-z0-9]/gi, "_") || "Presentation";
+
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}.pptx"`);
     res.send(buffer);
   } catch (err) {
+    console.error("❌ PPT Generation Error:", err);
     res.status(500).json({ error: "Failed to compile PowerPoint file." });
   }
 });
