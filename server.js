@@ -46,12 +46,12 @@ const extractJSON = (text) => {
 const fetchImageBase64 = async (prompt) => {
   if (!prompt) return null;
   try {
-    // Added 'premium' and 'high quality' parameters for better Pollinations output
+    // Premium modifiers for better AI image generation
     const enhancedPrompt = `${prompt}, high quality, 8k resolution, professional, highly detailed, no text`;
     const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?width=1024&height=1024&nologo=true`;
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8-second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8-second timeout limit
 
     const response = await fetch(url, { signal: controller.signal });
     clearTimeout(timeoutId);
@@ -67,7 +67,7 @@ const fetchImageBase64 = async (prompt) => {
 };
 
 // ==========================================
-// 🧠 AI GENERATION ROUTE (NOW AWARE OF SLIDE COUNT)
+// 🧠 AI GENERATION ROUTE
 // ==========================================
 app.post("/generate-json", async (req, res) => {
   try {
@@ -76,7 +76,6 @@ app.post("/generate-json", async (req, res) => {
 
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-    // 🎯 DYNAMIC PROMPTING based on whether we are making a full deck or regenerating ONE slide
     const isSingleSlide = slideCount === 1;
     
     const contextPrompt = isSingleSlide
@@ -122,7 +121,7 @@ FORMAT REQUIREMENTS:
 });
 
 // ==========================================
-// 👑 PPTX RENDER ENGINE (AGENCY-LEVEL LAYOUTS)
+// 👑 PPTX RENDER ENGINE
 // ==========================================
 app.post("/download-ppt", async (req, res) => {
   try {
@@ -188,7 +187,10 @@ app.post("/download-ppt", async (req, res) => {
     // ==========================================
     slides.forEach((slide, index) => {
       const s = pptx.addSlide();
-      const layout = slide.type || "content";
+      
+      // ✅ FIX: Force "image" layout to act as "content" so bullets NEVER disappear
+      let layout = slide.type || "content";
+      if (layout === "image") layout = "content"; 
       
       const rawHeading = cleanText(slide.heading || "");
       const icon = slide.icon || "🔹"; 
@@ -210,7 +212,7 @@ app.post("/download-ppt", async (req, res) => {
       if (layout === "content" || layout === "intro") {
         s.background = { fill: tConfig.bg };
 
-        // Theme-specific decorators
+        // Theme-specific background decorators
         if (activeTheme === "business") {
           s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 0.15, h: "100%", fill: { color: tConfig.accent } });
         } else if (activeTheme === "academic") {
@@ -218,21 +220,21 @@ app.post("/download-ppt", async (req, res) => {
           s.addShape(pptx.ShapeType.rect, { x: 0, y: 0.1, w: "100%", h: 0.02, fill: { color: tConfig.accent } });
         }
 
-        // Heading
+        // ✅ FIX: Headings now have larger height (h: 1.4) and start higher (y: 0.4) so they don't overlap lines
         s.addText(headingText, { 
-          x: 0.6, y: 0.6, w: 5.0, h: 0.8, 
-          fontSize: activeTheme === "modern" ? 36 : 32, 
+          x: 0.6, y: 0.4, w: 4.8, h: 1.4, 
+          fontSize: activeTheme === "modern" ? 34 : 32, 
           bold: true, color: tConfig.text, fontFace: tConfig.font, valign: "top" 
         });
         
-        // Divider
+        // ✅ FIX: Divider pushed down to y: 1.9
         s.addShape(pptx.ShapeType.rect, { 
-          x: 0.6, y: 1.5, w: 1.2, h: 0.03, fill: { color: tConfig.accent } 
+          x: 0.6, y: 1.9, w: 1.2, h: 0.03, fill: { color: tConfig.accent } 
         });
         
-        // Bullet Points
+        // ✅ FIX: Bullets pushed down to y: 2.2
         s.addText(pointsArray.join("\n"), {
-          x: 0.6, y: 1.8, w: 4.6, h: 3.2,
+          x: 0.6, y: 2.2, w: 4.6, h: 3.0,
           fontSize: 18, color: tConfig.secondary, fontFace: tConfig.font, 
           valign: "top", bullet: { type: 'bullet', characterCode: '2022' }, lineSpacing: 44
         });
@@ -240,34 +242,15 @@ app.post("/download-ppt", async (req, res) => {
         // Image Handling (Right Side)
         if (slide.base64Image) {
           if (activeTheme === "modern") {
-            // Edge-to-edge right side
             s.addImage({ data: slide.base64Image, x: 5.5, y: 0, w: 4.5, h: 5.625, sizing: { type: "crop", w: 4.5, h: 5.625 } });
           } else if (activeTheme === "business") {
-            // Drop shadow frame
             s.addShape(pptx.ShapeType.rect, { x: 5.75, y: 1.15, w: 3.8, h: 3.8, fill: { color: tConfig.accent } }); 
             s.addImage({ data: slide.base64Image, x: 5.6, y: 1.0, w: 3.8, h: 3.8, sizing: { type: "crop", w: 3.8, h: 3.8 } });
           } else {
-            // Academic clean frame
             s.addShape(pptx.ShapeType.rect, { x: 5.5, y: 1.0, w: 4.0, h: 3.5, fill: { color: "E2E8F0" } }); 
             s.addImage({ data: slide.base64Image, x: 5.6, y: 1.1, w: 3.8, h: 3.3, sizing: { type: "crop", w: 3.8, h: 3.3 } });
           }
         }
-      }
-
-      // ---------------------------------------------------------
-      // LAYOUT: IMAGE (Full Bleed)
-      // ---------------------------------------------------------
-      else if (layout === "image") {
-        s.background = { fill: "000000" };
-        if (slide.base64Image) {
-          s.addImage({ data: slide.base64Image, x: 0, y: 0, w: 10, h: 5.625, sizing: { type: "crop", w: 10, h: 5.625 } });
-        }
-        // Gradient overlay mock (dark rectangle with transparency)
-        s.addShape(pptx.ShapeType.rect, { x: 0, y: 3.8, w: 10, h: 1.825, fill: { color: "000000", transparency: 40 } });
-        s.addText(headingText, { 
-          x: 0.5, y: 4.2, w: 9, h: 1, 
-          fontSize: 38, bold: true, color: "FFFFFF", fontFace: tConfig.font, align: "center", shadow: { type: "outer" }
-        });
       }
 
       // ---------------------------------------------------------
@@ -285,10 +268,11 @@ app.post("/download-ppt", async (req, res) => {
         
         s.addShape(pptx.ShapeType.rect, { x: 4.5, y: 1.6, w: 1.0, h: 0.04, fill: { color: tConfig.accent } });
         
+        // ✅ FIX: Centered text box container, but left-aligned bullets so they don't look broken
         s.addText(pointsArray.join("\n"), {
-          x: 1.5, y: 2.1, w: 7, h: 2.5,
+          x: 2.0, y: 2.1, w: 6.0, h: 2.8,
           fontSize: 20, color: tConfig.secondary, fontFace: tConfig.font, 
-          valign: "top", align: "center", bullet: true, lineSpacing: 48
+          valign: "top", align: "left", bullet: { type: 'bullet', characterCode: '2022' }, lineSpacing: 44
         });
       }
     });
