@@ -70,13 +70,14 @@ app.post("/generate-json", async (req, res) => {
       ? `You are an elite presentation designer. Create EXACTLY 1 highly detailed content slide about "${topic}".`
       : `You are a world-class presentation designer. Create a brilliant ${slideCount}-slide executive deck about "${topic}". Story arc: Hook -> Context -> Core Concepts -> Future -> Summary.`;
 
+    // 🚨 FIX: Made the heading rule MUCH stricter to prevent overlapping in PPT
     const prompt = `
 ${contextPrompt}
 
 CRITICAL RULES:
 1. CONTENT TONE MUST BE STRICTLY: "${tone}". Adjust vocabulary and style accordingly.
 2. NO MARKDOWN ALLOWED. Do not use ** or *.
-3. "heading" MUST be punchy (Max 5 words).
+3. "heading" MUST be EXTREMELY short (Max 3 to 4 words). Do not write full sentences for headings.
 4. "points" MUST be EXACTLY 3 bullet points. Max 12 words per point.
 5. "icon" MUST be a single appropriate premium emoji.
 6. "imagePrompt" MUST be highly descriptive for an AI image generator.
@@ -123,7 +124,7 @@ ORIGINAL HEADING: ${heading}
 ORIGINAL POINTS: ${JSON.stringify(points)}
 
 CRITICAL RULES:
-1. "heading" must be punchy, max 5 words.
+1. "heading" must be punchy, max 4 words. Never write long sentences.
 2. "points" MUST be exactly 3 bullet points, max 12 words each. Ensure they are highly impactful.
 3. Return ONLY valid JSON. Do NOT use markdown.
 
@@ -203,9 +204,42 @@ app.post("/download-ppt", async (req, res) => {
           s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: "100%", h: 0.1, fill: { color: "1E293B" } });
           s.addShape(pptx.ShapeType.rect, { x: 0, y: 0.1, w: "100%", h: 0.02, fill: { color: tConfig.accent } });
         }
-        s.addText(headingText, { x: 0.6, y: 0.4, w: 4.8, h: 1.4, fontSize: activeTheme === "modern" ? 34 : 32, bold: true, color: tConfig.text, fontFace: tConfig.font, valign: "top" });
-        s.addShape(pptx.ShapeType.rect, { x: 0.6, y: 1.9, w: 1.2, h: 0.03, fill: { color: tConfig.accent } });
-        s.addText(pointsArray.join("\n"), { x: 0.6, y: 2.2, w: 4.6, h: 3.0, fontSize: 18, color: tConfig.secondary, fontFace: tConfig.font, valign: "top", bullet: { type: 'bullet', characterCode: '2022' }, lineSpacing: 44 });
+
+        // 🚨 OVERLAP FIX: Made font smaller (32 -> 30), increased height box (h:1.6)
+        s.addText(headingText, { 
+          x: 0.6, 
+          y: 0.4, 
+          w: 4.8, 
+          h: 1.6, 
+          fontSize: activeTheme === "modern" ? 32 : 30, 
+          bold: true, 
+          color: tConfig.text, 
+          fontFace: tConfig.font, 
+          valign: "top" 
+        });
+        
+        // 🚨 OVERLAP FIX: Pushed divider line much further down (1.9 -> 2.15)
+        s.addShape(pptx.ShapeType.rect, { 
+          x: 0.6, 
+          y: 2.15, 
+          w: 1.2, 
+          h: 0.03, 
+          fill: { color: tConfig.accent } 
+        });
+        
+        // 🚨 OVERLAP FIX: Pushed bullet points much further down (2.2 -> 2.4)
+        s.addText(pointsArray.join("\n"), { 
+          x: 0.6, 
+          y: 2.4, 
+          w: 4.6, 
+          h: 2.8, 
+          fontSize: 18, 
+          color: tConfig.secondary, 
+          fontFace: tConfig.font, 
+          valign: "top", 
+          bullet: { type: 'bullet', characterCode: '2022' }, 
+          lineSpacing: 44 
+        });
 
         if (slide.base64Image) {
           if (activeTheme === "modern") s.addImage({ data: slide.base64Image, x: 5.5, y: 0, w: 4.5, h: 5.625, sizing: { type: "crop", w: 4.5, h: 5.625 } });
@@ -227,8 +261,6 @@ app.post("/download-ppt", async (req, res) => {
     });
 
     const buffer = await pptx.write("nodebuffer");
-    
-    // ✅ THE FIX: Added fileName variable definition back!
     const fileName = safeTitle.replace(/[^a-z0-9]/gi, "_") || "Presentation";
 
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
