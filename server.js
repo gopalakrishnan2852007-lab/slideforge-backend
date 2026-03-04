@@ -70,7 +70,6 @@ app.post("/generate-json", async (req, res) => {
       ? `You are an elite presentation designer. Create EXACTLY 1 highly detailed content slide about "${topic}".`
       : `You are a world-class presentation designer. Create a brilliant ${slideCount}-slide executive deck about "${topic}". Story arc: Hook -> Context -> Core Concepts -> Future -> Summary.`;
 
-    // 🚨 FIX: Made the heading rule MUCH stricter to prevent overlapping in PPT
     const prompt = `
 ${contextPrompt}
 
@@ -144,7 +143,7 @@ FORMAT:
 });
 
 // ==========================================
-// 👑 PPTX RENDER ENGINE
+// 👑 PPTX RENDER ENGINE (REBUILT THEMES)
 // ==========================================
 app.post("/download-ppt", async (req, res) => {
   try {
@@ -163,29 +162,34 @@ app.post("/download-ppt", async (req, res) => {
 
     const safeTitle = cleanText(data.title || "Presentation");
 
+    // 🚨 MASSIVELY DISTINCT THEMES
     const THEMES = {
-      modern: { bg: "09090B", text: "FFFFFF", accent: "6366F1", secondary: "94A3B8", font: "Helvetica" },
-      business: { bg: "0F172A", text: "F8FAFC", accent: "38BDF8", secondary: "CBD5E1", font: "Arial" },
-      academic: { bg: "FDFBF7", text: "1E293B", accent: "0F766E", secondary: "475569", font: "Georgia" }
+      modern: { bg: "09090B", titleText: "FFFFFF", accent: "6366F1", secondary: "94A3B8", font: "Helvetica" }, // Tech Dark Mode
+      business: { bg: "FFFFFF", titleText: "1D4ED8", accent: "1D4ED8", secondary: "334155", font: "Arial" },   // Corporate Light Mode
+      academic: { bg: "FDFBF7", titleText: "1E293B", accent: "0F766E", secondary: "475569", font: "Georgia" }  // Classic Cream
     };
     const tConfig = THEMES[activeTheme];
 
-    // COVER
+    // ================== COVER SLIDE ==================
     const cover = pptx.addSlide();
     cover.background = { fill: tConfig.bg };
+    
     if (activeTheme === "modern") {
       cover.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: "100%", h: 0.15, fill: { color: tConfig.accent } });
-      cover.addText(safeTitle.toUpperCase(), { x: 1, y: 2.2, w: 8, h: 1.5, fontSize: 44, bold: true, color: tConfig.text, fontFace: tConfig.font, align: "center", charSpacing: 2 });
-    } else if (activeTheme === "business") {
-      cover.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 0.4, h: "100%", fill: { color: tConfig.accent } });
-      cover.addText(safeTitle, { x: 1.2, y: 2.2, w: 8, h: 1.5, fontSize: 48, bold: true, color: tConfig.text, fontFace: tConfig.font, align: "left" });
-    } else {
+      cover.addText(safeTitle.toUpperCase(), { x: 1, y: 2.2, w: 8, h: 1.5, fontSize: 44, bold: true, color: tConfig.titleText, fontFace: tConfig.font, align: "center", charSpacing: 2 });
+    } 
+    else if (activeTheme === "business") {
+      // Big Consulting-style left Blue pillar
+      cover.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 3.5, h: "100%", fill: { color: tConfig.accent } });
+      cover.addText(safeTitle, { x: 4.0, y: 2.2, w: 5.5, h: 2.0, fontSize: 44, bold: true, color: "0F172A", fontFace: tConfig.font, align: "left" });
+    } 
+    else {
       cover.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: "100%", h: 0.2, fill: { color: "1E293B" } });
       cover.addShape(pptx.ShapeType.rect, { x: 0, y: 0.2, w: "100%", h: 0.05, fill: { color: tConfig.accent } });
-      cover.addText(safeTitle, { x: 1, y: 2.2, w: 8, h: 1.5, fontSize: 42, bold: true, color: tConfig.text, fontFace: tConfig.font, align: "center" });
+      cover.addText(safeTitle, { x: 1, y: 2.2, w: 8, h: 1.5, fontSize: 42, bold: true, color: tConfig.titleText, fontFace: tConfig.font, align: "center" });
     }
 
-    // SLIDES
+    // ================== CONTENT SLIDES ==================
     slides.forEach((slide, index) => {
       const s = pptx.addSlide();
       let layout = slide.type || "content";
@@ -195,67 +199,82 @@ app.post("/download-ppt", async (req, res) => {
       const pointsArray = (slide.points || []).map(cleanText);
 
       if (slide.speakerNotes) s.addNotes(cleanText(slide.speakerNotes));
+      
+      // Page numbers
       s.addText(`${index + 1} / ${slides.length}`, { x: 9.0, y: 5.2, w: 0.8, h: 0.3, fontSize: 10, color: tConfig.secondary, fontFace: tConfig.font, align: "right", bold: true });
 
       if (layout === "content" || layout === "intro") {
         s.background = { fill: tConfig.bg };
-        if (activeTheme === "business") s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 0.15, h: "100%", fill: { color: tConfig.accent } });
+
+        // 1. MODERN THEME RENDERING
+        if (activeTheme === "modern") {
+          s.addText(headingText, { x: 0.6, y: 0.4, w: 4.8, h: 1.6, fontSize: 32, bold: true, color: tConfig.titleText, fontFace: tConfig.font, valign: "top" });
+          s.addShape(pptx.ShapeType.rect, { x: 0.6, y: 2.15, w: 1.2, h: 0.03, fill: { color: tConfig.accent } });
+          s.addText(pointsArray.join("\n"), { x: 0.6, y: 2.4, w: 4.6, h: 2.8, fontSize: 18, color: tConfig.secondary, fontFace: tConfig.font, valign: "top", bullet: { type: 'bullet', characterCode: '2022' }, lineSpacing: 44 });
+          
+          if (slide.base64Image) {
+            // Edge-to-edge bleed image
+            s.addImage({ data: slide.base64Image, x: 5.5, y: 0, w: 4.5, h: 5.625, sizing: { type: "crop", w: 4.5, h: 5.625 } });
+          }
+        } 
+        
+        // 2. BUSINESS THEME RENDERING
+        else if (activeTheme === "business") {
+          s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: "100%", h: 0.15, fill: { color: tConfig.accent } }); // Top Accent Line
+          s.addShape(pptx.ShapeType.rect, { x: 0, y: 5.4, w: "100%", h: 0.225, fill: { color: "F1F5F9" } }); // Clean Gray Footer
+          
+          s.addText(headingText, { x: 0.6, y: 0.4, w: 8.8, h: 1.0, fontSize: 32, bold: true, color: tConfig.titleText, fontFace: tConfig.font, valign: "top" });
+          s.addShape(pptx.ShapeType.rect, { x: 0.6, y: 1.4, w: 8.8, h: 0.01, fill: { color: "CBD5E1" } }); // Thin Full-Width Divider Line
+          
+          // Points sit slightly higher in this theme
+          s.addText(pointsArray.join("\n"), { x: 0.6, y: 1.7, w: 4.6, h: 3.2, fontSize: 18, color: tConfig.secondary, fontFace: tConfig.font, valign: "top", bullet: { type: 'bullet', characterCode: '2022' }, lineSpacing: 44 });
+          
+          if (slide.base64Image) {
+            // Corporate framed image with slight shadow-box effect
+            s.addShape(pptx.ShapeType.rect, { x: 5.4, y: 1.7, w: 4.0, h: 3.2, fill: { color: "F8FAFC" }, line: { color: "CBD5E1", width: 1 } }); 
+            s.addImage({ data: slide.base64Image, x: 5.5, y: 1.8, w: 3.8, h: 3.0, sizing: { type: "crop", w: 3.8, h: 3.0 } });
+          }
+        } 
+        
+        // 3. ACADEMIC THEME RENDERING
         else if (activeTheme === "academic") {
           s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: "100%", h: 0.1, fill: { color: "1E293B" } });
           s.addShape(pptx.ShapeType.rect, { x: 0, y: 0.1, w: "100%", h: 0.02, fill: { color: tConfig.accent } });
-        }
-
-        // 🚨 OVERLAP FIX: Made font smaller (32 -> 30), increased height box (h:1.6)
-        s.addText(headingText, { 
-          x: 0.6, 
-          y: 0.4, 
-          w: 4.8, 
-          h: 1.6, 
-          fontSize: activeTheme === "modern" ? 32 : 30, 
-          bold: true, 
-          color: tConfig.text, 
-          fontFace: tConfig.font, 
-          valign: "top" 
-        });
-        
-        // 🚨 OVERLAP FIX: Pushed divider line much further down (1.9 -> 2.15)
-        s.addShape(pptx.ShapeType.rect, { 
-          x: 0.6, 
-          y: 2.15, 
-          w: 1.2, 
-          h: 0.03, 
-          fill: { color: tConfig.accent } 
-        });
-        
-        // 🚨 OVERLAP FIX: Pushed bullet points much further down (2.2 -> 2.4)
-        s.addText(pointsArray.join("\n"), { 
-          x: 0.6, 
-          y: 2.4, 
-          w: 4.6, 
-          h: 2.8, 
-          fontSize: 18, 
-          color: tConfig.secondary, 
-          fontFace: tConfig.font, 
-          valign: "top", 
-          bullet: { type: 'bullet', characterCode: '2022' }, 
-          lineSpacing: 44 
-        });
-
-        if (slide.base64Image) {
-          if (activeTheme === "modern") s.addImage({ data: slide.base64Image, x: 5.5, y: 0, w: 4.5, h: 5.625, sizing: { type: "crop", w: 4.5, h: 5.625 } });
-          else if (activeTheme === "business") {
-            s.addShape(pptx.ShapeType.rect, { x: 5.75, y: 1.15, w: 3.8, h: 3.8, fill: { color: tConfig.accent } }); 
-            s.addImage({ data: slide.base64Image, x: 5.6, y: 1.0, w: 3.8, h: 3.8, sizing: { type: "crop", w: 3.8, h: 3.8 } });
-          } else {
+          
+          s.addText(headingText, { x: 0.6, y: 0.4, w: 4.8, h: 1.6, fontSize: 30, bold: true, color: tConfig.titleText, fontFace: tConfig.font, valign: "top" });
+          s.addShape(pptx.ShapeType.rect, { x: 0.6, y: 2.15, w: 1.2, h: 0.03, fill: { color: tConfig.accent } });
+          
+          s.addText(pointsArray.join("\n"), { x: 0.6, y: 2.4, w: 4.6, h: 2.8, fontSize: 18, color: tConfig.secondary, fontFace: tConfig.font, valign: "top", bullet: { type: 'bullet', characterCode: '2022' }, lineSpacing: 44 });
+          
+          if (slide.base64Image) {
             s.addShape(pptx.ShapeType.rect, { x: 5.5, y: 1.0, w: 4.0, h: 3.5, fill: { color: "E2E8F0" } }); 
             s.addImage({ data: slide.base64Image, x: 5.6, y: 1.1, w: 3.8, h: 3.3, sizing: { type: "crop", w: 3.8, h: 3.3 } });
           }
         }
-      } else if (layout === "summary") {
-        s.background = { fill: activeTheme === "modern" ? "18181B" : tConfig.bg };
-        s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: "100%", h: 0.15, fill: { color: tConfig.accent } });
-        s.addText(`🌟 KEY TAKEAWAYS`, { x: 1.5, y: 0.8, w: 7, h: 0.8, fontSize: 26, bold: true, color: tConfig.text, fontFace: tConfig.font, align: "center", charSpacing: 3 });
-        s.addShape(pptx.ShapeType.rect, { x: 4.5, y: 1.6, w: 1.0, h: 0.04, fill: { color: tConfig.accent } });
+      } 
+      
+      // ================== SUMMARY SLIDES ==================
+      else if (layout === "summary") {
+        s.background = { fill: tConfig.bg };
+        
+        if (activeTheme === "modern") {
+          s.background = { fill: "18181B" }; // Slightly lighter black
+          s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: "100%", h: 0.15, fill: { color: tConfig.accent } });
+          s.addText(`🌟 KEY TAKEAWAYS`, { x: 1.5, y: 0.8, w: 7, h: 0.8, fontSize: 26, bold: true, color: tConfig.titleText, fontFace: tConfig.font, align: "center", charSpacing: 3 });
+          s.addShape(pptx.ShapeType.rect, { x: 4.5, y: 1.6, w: 1.0, h: 0.04, fill: { color: tConfig.accent } });
+        } 
+        else if (activeTheme === "business") {
+          s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: "100%", h: 0.15, fill: { color: tConfig.accent } });
+          s.addText(`🌟 KEY TAKEAWAYS`, { x: 1.5, y: 0.8, w: 7, h: 0.8, fontSize: 32, bold: true, color: tConfig.titleText, fontFace: tConfig.font, align: "center" });
+          s.addShape(pptx.ShapeType.rect, { x: 3.0, y: 1.6, w: 4.0, h: 0.02, fill: { color: "CBD5E1" } });
+        } 
+        else {
+          s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: "100%", h: 0.1, fill: { color: "1E293B" } });
+          s.addShape(pptx.ShapeType.rect, { x: 0, y: 0.1, w: "100%", h: 0.02, fill: { color: tConfig.accent } });
+          s.addText(`🌟 KEY TAKEAWAYS`, { x: 1.5, y: 0.8, w: 7, h: 0.8, fontSize: 28, bold: true, color: tConfig.titleText, fontFace: tConfig.font, align: "center" });
+          s.addShape(pptx.ShapeType.rect, { x: 4.5, y: 1.6, w: 1.0, h: 0.02, fill: { color: tConfig.accent } });
+        }
+
         s.addText(pointsArray.join("\n"), { x: 2.0, y: 2.1, w: 6.0, h: 2.8, fontSize: 20, color: tConfig.secondary, fontFace: tConfig.font, valign: "top", align: "left", bullet: { type: 'bullet', characterCode: '2022' }, lineSpacing: 44 });
       }
     });
