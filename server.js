@@ -8,18 +8,13 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: "50mb" }));
 
-// ==========================================
-// 🚀 HEALTH CHECK
-// ==========================================
-app.get("/", (req, res) => {
-  res.send("🚀 SlideForge God-Level Engine Running");
-});
+app.get("/", (req, res) => res.send("🚀 SlideForge God-Level Engine Running"));
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
 // ==========================================
-// 🛠️ UTILS: TEXT & JSON CLEANING
+// 🛠️ UTILS
 // ==========================================
 const cleanText = (text) => text?.replace(/\*\*/g, "").replace(/\*/g, "").replace(/_/g, "").trim() || "";
 
@@ -31,110 +26,79 @@ const extractJSON = (text) => {
     if (start === -1 || end === -1) throw new Error("No JSON boundaries found");
     return JSON.parse(cleanText.substring(start, end + 1));
   } catch (err) {
-    console.error("❌ Failed to parse AI response:", text);
+    console.error("❌ JSON Parse Error:", text);
     throw new Error("Invalid AI JSON format generated.");
   }
 };
 
-const fetchImageBase64 = async (prompt) => {
+// Fixed to prevent rate limiting and timeouts
+const fetchImageBase64 = async (prompt, seed = 1) => {
   if (!prompt) return null;
   try {
-    const enhancedPrompt = `${prompt}, high quality, cinematic, highly detailed, no text`;
-    const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?width=1024&height=1024&nologo=true`;
+    const enhancedPrompt = `${prompt}, highly detailed, cinematic lighting, 8k resolution, photorealistic, no text`;
+    const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?width=1024&height=1024&nologo=true&seed=${seed}`;
+    
+    // Increased timeout for stable image generation
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const timeoutId = setTimeout(() => controller.abort(), 25000); 
+    
     const response = await fetch(url, { signal: controller.signal });
     clearTimeout(timeoutId);
+    
     if (!response.ok) return null;
     const buffer = Buffer.from(await response.arrayBuffer());
     return `data:image/jpeg;base64,${buffer.toString("base64")}`;
   } catch (error) {
+    console.error("Image fetch error:", error.message);
     return null;
   }
 };
 
 // ==========================================
-// 🧠 1. GENERATE FULL DECK
+// 🧠 PROMPT ENGINEERING
 // ==========================================
+const slideSchema = `
+{
+ "title": "Main Presentation Title",
+ "slides": [
+  {
+   "layout": "image_right | image_left | center_focus",
+   "heading": "Short Punchy Heading",
+   "points": ["Point one max 12 words", "Point two max 12 words", "Point three max 12 words"],
+   "speakerNotes": "Detailed script for the presenter to read out loud...",
+   "imagePrompt": "Cinematic 8k visual of [subject], photorealistic"
+  }
+ ]
+}`;
+
 app.post("/generate-json", async (req, res) => {
   try {
     const { topic, slideCount = 6, tone = "Professional" } = req.body;
     if (!topic) return res.status(400).json({ error: "Topic required" });
 
-    const prompt = `You are a world-class presentation designer. Create a brilliant ${slideCount}-slide executive deck about "${topic}". Story arc: Hook -> Context -> Core Concepts -> Future -> Summary. Tone MUST BE strictly: "${tone}".
-
+    const prompt = `You are an elite presentation designer. Create a ${slideCount}-slide deck about "${topic}". Tone: "${tone}".
 CRITICAL RULES:
-1. NO MARKDOWN ALLOWED. Do not use ** or *.
-2. "heading" MUST be EXTREMELY short (Max 4 words).
-3. "points" MUST be EXACTLY 3 bullet points. Max 12 words per point. Balance the text elegantly.
-4. "icon" MUST be a single appropriate premium emoji.
-5. "imagePrompt" MUST be highly descriptive for an AI image generator (Cinematic, vivid).
-6. "speakerNotes" script for the presenter to say out loud.
-7. Return ONLY valid JSON format below:
-
-{
- "title": "Main Presentation Title",
- "slides": [
-  {
-   "type": "content",
-   "heading": "Short Heading",
-   "icon": "💎",
-   "points": ["Point one", "Point two", "Point three"],
-   "speakerNotes": "Welcome everyone to this presentation...",
-   "imagePrompt": "Cinematic visual of [subject], 8k"
-  }
- ]
-}`;
+1. "layout" MUST alternate dynamically between "image_right", "image_left", and "center_focus".
+2. "heading" MUST be max 4 words.
+3. "points" MUST be EXACTLY 3 bullet points.
+4. "imagePrompt" IS ABSOLUTELY MANDATORY for every slide. Make it a highly detailed AI image generation prompt.
+Return EXACTLY this JSON format: ${slideSchema}`;
+    
     const result = await model.generateContent(prompt);
     res.json(extractJSON(await result.response.text()));
   } catch (err) {
-    res.status(500).json({ error: "AI Generation failed. Check API limits." });
+    res.status(500).json({ error: "AI Generation failed." });
   }
 });
 
-// ==========================================
-// ✨ 2. AI IMPROVE SINGLE SLIDE (Design Balance)
-// ==========================================
-app.post("/improve-slide", async (req, res) => {
-  try {
-    const { heading, points, tone = "Professional" } = req.body;
-    const prompt = `You are an expert copywriter. IMPROVE and BALANCE the slide content. Tone: "${tone}".
-ORIGINAL HEADING: ${heading}
-ORIGINAL POINTS: ${JSON.stringify(points)}
-
-RULES: Make heading punchy (max 4 words). Shorten long bullets to EXACTLY 3 points (max 10 words each). Highlight key impact. Format as JSON: { "heading": "...", "points": ["...", "...", "..."] }`;
-    const result = await model.generateContent(prompt);
-    res.json(extractJSON(await result.response.text()));
-  } catch (err) {
-    res.status(500).json({ error: "Failed to improve slide." });
-  }
-});
-
-// ==========================================
-// 🔄 3. AI REWRITE SLIDE (Completely rewrite)
-// ==========================================
-app.post("/rewrite-slide", async (req, res) => {
-  try {
-    const { heading, points, tone } = req.body;
-    const prompt = `Completely rewrite this slide from scratch to be much clearer and more engaging. Tone: "${tone}".
-Current: ${heading} - ${JSON.stringify(points)}
-Return JSON: { "heading": "New Heading", "points": ["P1", "P2", "P3"], "speakerNotes": "new notes", "imagePrompt": "new image description" }`;
-    const result = await model.generateContent(prompt);
-    res.json(extractJSON(await result.response.text()));
-  } catch (err) {
-    res.status(500).json({ error: "Failed to rewrite slide." });
-  }
-});
-
-// ==========================================
-// 📈 4. SMART SLIDE EXPANSION
-// ==========================================
 app.post("/extend-slides", async (req, res) => {
   try {
     const { currentSlides, addCount = 4, tone } = req.body;
     const prompt = `Here are the current slides: ${JSON.stringify(currentSlides.map(s => s.heading))}.
-Generate ${addCount} MORE slides that continue the narrative deeply. Tone: "${tone}".
-Return JSON: { "slides": [ { "heading": "...", "points": [...], "icon": "...", "imagePrompt": "...", "speakerNotes": "..." } ] }`;
+Generate ${addCount} MORE slides continuing the narrative deeply. Tone: "${tone}".
+CRITICAL: You MUST use the exact same JSON format as before, including "layout", "imagePrompt", and EXACTLY 3 "points".
+Format to return: { "slides": [ { "layout": "image_right", "heading": "...", "points": ["..","..",".."], "speakerNotes": "...", "imagePrompt": "..." } ] }`;
+    
     const result = await model.generateContent(prompt);
     res.json(extractJSON(await result.response.text()));
   } catch (err) {
@@ -142,40 +106,40 @@ Return JSON: { "slides": [ { "heading": "...", "points": [...], "icon": "...", "
   }
 });
 
-// ==========================================
-// 📋 5. AI SUMMARY MODE
-// ==========================================
+app.post("/improve-slide", async (req, res) => {
+  try {
+    const { heading, points, tone } = req.body;
+    const result = await model.generateContent(`IMPROVE and BALANCE this slide. Tone: "${tone}". Heading: ${heading}, Points: ${JSON.stringify(points)}. Return JSON: { "heading": "...", "points": ["...", "...", "..."] }`);
+    res.json(extractJSON(await result.response.text()));
+  } catch (err) { res.status(500).json({ error: "Failed." }); }
+});
+
+app.post("/rewrite-slide", async (req, res) => {
+  try {
+    const { heading, points, tone } = req.body;
+    const result = await model.generateContent(`Completely rewrite clearer. Tone: "${tone}". Current: ${heading} - ${JSON.stringify(points)}. Return JSON: { "heading": "...", "points": ["P1", "P2", "P3"], "speakerNotes": "...", "imagePrompt": "..." }`);
+    res.json(extractJSON(await result.response.text()));
+  } catch (err) { res.status(500).json({ error: "Failed." }); }
+});
+
 app.post("/generate-summary", async (req, res) => {
   try {
     const { slides } = req.body;
-    const prompt = `Analyze these slides: ${JSON.stringify(slides.map(s => s.heading + " " + s.points.join(",")))}.
-Generate ONE Executive Summary slide.
-Return JSON: { "slide": { "heading": "Executive Summary", "points": ["Core takeaway 1", "Core takeaway 2", "Core takeaway 3"], "icon": "🌟", "imagePrompt": "Abstract success representation, professional", "speakerNotes": "To summarize our core findings..." } }`;
-    const result = await model.generateContent(prompt);
+    const result = await model.generateContent(`Analyze these slides: ${JSON.stringify(slides.map(s => s.heading))}. Generate ONE Executive Summary slide. Return JSON: { "slide": { "layout": "center_focus", "heading": "Executive Summary", "points": ["..","..",".."], "imagePrompt": "Abstract success", "speakerNotes": "..." } }`);
     res.json(extractJSON(await result.response.text()));
-  } catch (err) {
-    res.status(500).json({ error: "Failed to generate summary." });
-  }
+  } catch (err) { res.status(500).json({ error: "Failed." }); }
 });
 
-// ==========================================
-// 🎙️ 6. FULL SCRIPT GENERATOR
-// ==========================================
 app.post("/generate-script", async (req, res) => {
   try {
     const { slides } = req.body;
-    const prompt = `Write a professional, cohesive presentation speech script for these slides: ${JSON.stringify(slides)}.
-Return JSON containing an array of strings, where each string is the speech for that specific slide.
-Format: { "script": ["Slide 1 speech...", "Slide 2 speech..."] }`;
-    const result = await model.generateContent(prompt);
+    const result = await model.generateContent(`Write a professional speech script for these slides: ${JSON.stringify(slides)}. Return JSON: { "script": ["Slide 1...", "Slide 2..."] }`);
     res.json(extractJSON(await result.response.text()));
-  } catch (err) {
-    res.status(500).json({ error: "Failed to generate script." });
-  }
+  } catch (err) { res.status(500).json({ error: "Failed." }); }
 });
 
 // ==========================================
-// 👑 7. PPT RENDER ENGINE (BASE64 ANTI-CORRUPTION FIX)
+// 👑 PPT RENDER ENGINE (FIXED RATE LIMITS)
 // ==========================================
 app.post("/download-ppt", async (req, res) => {
   try {
@@ -184,65 +148,81 @@ app.post("/download-ppt", async (req, res) => {
     const pptx = new PptxGenJS();
     pptx.layout = "LAYOUT_16x9";
 
-    const slides = await Promise.all(data.slides.map(async (s) => ({
-      ...s, base64Image: await fetchImageBase64(s.imagePrompt),
-    })));
-
-    const safeTitle = cleanText(data.title || "Presentation");
-    const THEMES = {
-      modern: { bg: "09090B", titleText: "FFFFFF", accent: "6366F1", secondary: "94A3B8", font: "Helvetica" },
-      business: { bg: "FFFFFF", titleText: "1D4ED8", accent: "1D4ED8", secondary: "334155", font: "Arial" },
-      academic: { bg: "FDFBF7", titleText: "1E293B", accent: "0F766E", secondary: "475569", font: "Georgia" }
-    };
-    const tConfig = THEMES[activeTheme];
-
-    // --- Cover Slide ---
-    const cover = pptx.addSlide();
-    cover.background = { fill: tConfig.bg };
-    if (activeTheme === "modern") {
-      cover.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: "100%", h: 0.15, fill: { color: tConfig.accent } });
-      cover.addText(safeTitle.toUpperCase(), { x: 1, y: 2.2, w: 8, h: 1.5, fontSize: 44, bold: true, color: tConfig.titleText, fontFace: tConfig.font, align: "center" });
-    } else {
-      cover.addText(safeTitle, { x: 1, y: 2.2, w: 8, h: 1.5, fontSize: 42, bold: true, color: tConfig.titleText, fontFace: tConfig.font, align: "center" });
+    // ✅ FIXED: Fetch sequentially to prevent 429 Too Many Requests
+    const slidesWithImages = [];
+    for (let i = 0; i < data.slides.length; i++) {
+      const s = data.slides[i];
+      const safePrompt = s.imagePrompt || s.heading || "abstract presentation background";
+      const base64Image = await fetchImageBase64(safePrompt, i + 1);
+      slidesWithImages.push({ ...s, base64Image });
     }
 
-    // --- Content Slides ---
-    slides.forEach((slide, index) => {
+    const PALETTES = {
+      modern: [
+        { bg: "09090B", text: "FFFFFF", accent: "6366F1", secondary: "94A3B8" }, 
+        { bg: "1E1B4B", text: "FFFFFF", accent: "EC4899", secondary: "A5B4FC" }, 
+        { bg: "0F172A", text: "FFFFFF", accent: "38BDF8", secondary: "94A3B8" }  
+      ],
+      business: [
+        { bg: "FFFFFF", text: "1E293B", accent: "1D4ED8", secondary: "475569" }, 
+        { bg: "1E293B", text: "FFFFFF", accent: "38BDF8", secondary: "CBD5E1" }, 
+        { bg: "F8FAFC", text: "0F172A", accent: "0F766E", secondary: "334155" }  
+      ],
+      academic: [
+        { bg: "FDFBF7", text: "1E293B", accent: "0F766E", secondary: "475569" }, 
+        { bg: "450A0A", text: "FEF3C7", accent: "FCD34D", secondary: "FDE68A" }, 
+        { bg: "1E293B", text: "F8FAFC", accent: "94A3B8", secondary: "CBD5E1" }  
+      ]
+    };
+
+    const fontMap = { modern: "Helvetica", business: "Arial", academic: "Georgia" };
+    const font = fontMap[activeTheme];
+    const safeTitle = cleanText(data.title);
+
+    const cover = pptx.addSlide();
+    const coverTheme = PALETTES[activeTheme][0];
+    cover.background = { fill: coverTheme.bg };
+    cover.addText(safeTitle, { x: 1, y: 2.2, w: 8, h: 1.5, fontSize: 44, bold: true, color: coverTheme.text, fontFace: font, align: "center" });
+    cover.addShape(pptx.ShapeType.rect, { x: 4, y: 4, w: 2, h: 0.05, fill: { color: coverTheme.accent } });
+
+    slidesWithImages.forEach((slide, index) => {
       const s = pptx.addSlide();
-      const headingText = `${slide.icon || "🔹"}  ${cleanText(slide.heading)}`; 
-      const pointsArray = (slide.points || []).map(cleanText);
-
+      const layout = slide.layout || "image_right";
+      const themeConfig = PALETTES[activeTheme][(index + 1) % 3]; 
+      
+      s.background = { fill: themeConfig.bg };
       if (slide.speakerNotes) s.addNotes(cleanText(slide.speakerNotes));
-      s.addText(`${index + 1} / ${slides.length}`, { x: 9.0, y: 5.2, w: 0.8, h: 0.3, fontSize: 10, color: tConfig.secondary, fontFace: tConfig.font, align: "right" });
-      s.background = { fill: tConfig.bg };
+      s.addText(`${index + 1}`, { x: 9.2, y: 5.2, w: 0.5, h: 0.3, fontSize: 10, color: themeConfig.secondary, align: "right" });
 
-      if (activeTheme === "modern") {
-        s.addText(headingText, { x: 0.6, y: 0.4, w: 4.8, h: 1.6, fontSize: 32, bold: true, color: tConfig.titleText, fontFace: tConfig.font, valign: "top" });
-        s.addShape(pptx.ShapeType.rect, { x: 0.6, y: 2.15, w: 1.2, h: 0.03, fill: { color: tConfig.accent } });
-        s.addText(pointsArray.join("\n"), { x: 0.6, y: 2.4, w: 4.6, h: 2.8, fontSize: 18, color: tConfig.secondary, fontFace: tConfig.font, valign: "top", bullet: true, lineSpacing: 44 });
-        if (slide.base64Image) s.addImage({ data: slide.base64Image, x: 5.5, y: 0, w: 4.5, h: 5.625, sizing: { type: "cover", w: 4.5, h: 5.625 } });
+      const headingText = cleanText(slide.heading);
+      const pointsText = (slide.points || []).map(cleanText).join("\n");
+
+      if (layout === "image_left") {
+        if (slide.base64Image) s.addImage({ data: slide.base64Image, x: 0, y: 0, w: 4.5, h: 5.625, sizing: { type: "cover", w: 4.5, h: 5.625 } });
+        s.addText(headingText, { x: 5.0, y: 0.8, w: 4.5, h: 1.2, fontSize: 32, bold: true, color: themeConfig.text, fontFace: font });
+        s.addShape(pptx.ShapeType.rect, { x: 5.0, y: 2.1, w: 1.0, h: 0.03, fill: { color: themeConfig.accent } });
+        s.addText(pointsText, { x: 5.0, y: 2.4, w: 4.5, h: 2.8, fontSize: 18, color: themeConfig.secondary, fontFace: font, bullet: true, lineSpacing: 40 });
       } 
-      else if (activeTheme === "business") {
-        s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: "100%", h: 0.15, fill: { color: tConfig.accent } });
-        s.addText(headingText, { x: 0.6, y: 0.4, w: 8.8, h: 1.0, fontSize: 32, bold: true, color: tConfig.titleText, fontFace: tConfig.font, valign: "top" });
-        s.addText(pointsArray.join("\n"), { x: 0.6, y: 1.7, w: 4.6, h: 3.2, fontSize: 18, color: tConfig.secondary, fontFace: tConfig.font, valign: "top", bullet: true, lineSpacing: 44 });
+      else if (layout === "center_focus") {
+        // ✅ FIXED: Add image as a cinematic background overlay for center focus
         if (slide.base64Image) {
-          s.addShape(pptx.ShapeType.rect, { x: 5.4, y: 1.7, w: 4.0, h: 3.2, fill: { color: "F8FAFC" }, line: { color: "CBD5E1", width: 1 } }); 
-          s.addImage({ data: slide.base64Image, x: 5.5, y: 1.8, w: 3.8, h: 3.0, sizing: { type: "cover", w: 3.8, h: 3.0 } });
+           s.addImage({ data: slide.base64Image, x: 0, y: 0, w: 10, h: 5.625, sizing: { type: "cover", w: 10, h: 5.625 } });
+           s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 10, h: 5.625, fill: { color: themeConfig.bg, transparency: 85 } }); // Dark Overlay
         }
-      }
-      else {
-        s.addText(headingText, { x: 0.6, y: 0.4, w: 4.8, h: 1.6, fontSize: 30, bold: true, color: tConfig.titleText, fontFace: tConfig.font, valign: "top" });
-        s.addText(pointsArray.join("\n"), { x: 0.6, y: 2.4, w: 4.6, h: 2.8, fontSize: 18, color: tConfig.secondary, fontFace: tConfig.font, valign: "top", bullet: true, lineSpacing: 44 });
-        if (slide.base64Image) s.addImage({ data: slide.base64Image, x: 5.6, y: 1.1, w: 3.8, h: 3.3, sizing: { type: "cover", w: 3.8, h: 3.3 } });
+        s.addText(headingText, { x: 1.0, y: 0.8, w: 8.0, h: 1.2, fontSize: 38, bold: true, color: themeConfig.text, fontFace: font, align: "center" });
+        s.addShape(pptx.ShapeType.rect, { x: 4.5, y: 2.1, w: 1.0, h: 0.03, fill: { color: themeConfig.accent } });
+        s.addText(pointsText, { x: 1.5, y: 2.5, w: 7.0, h: 2.8, fontSize: 22, color: themeConfig.text, fontFace: font, bullet: true, lineSpacing: 40, align: "left" });
+      } 
+      else { 
+        s.addText(headingText, { x: 0.5, y: 0.8, w: 4.5, h: 1.2, fontSize: 32, bold: true, color: themeConfig.text, fontFace: font });
+        s.addShape(pptx.ShapeType.rect, { x: 0.5, y: 2.1, w: 1.0, h: 0.03, fill: { color: themeConfig.accent } });
+        s.addText(pointsText, { x: 0.5, y: 2.4, w: 4.5, h: 2.8, fontSize: 18, color: themeConfig.secondary, fontFace: font, bullet: true, lineSpacing: 40 });
+        if (slide.base64Image) s.addImage({ data: slide.base64Image, x: 5.5, y: 0, w: 4.5, h: 5.625, sizing: { type: "cover", w: 4.5, h: 5.625 } });
       }
     });
 
-    // Write file as Base64 string to prevent network corruption
     const base64File = await pptx.write("base64");
-    const fileName = safeTitle.replace(/[^a-z0-9]/gi, "_") || "Presentation";
-
-    res.json({ fileName: `${fileName}.pptx`, fileData: base64File });
+    res.json({ fileName: `${safeTitle.replace(/[^a-z0-9]/gi, "_") || "Presentation"}.pptx`, fileData: base64File });
   } catch (err) {
     console.error("Export Error:", err);
     res.status(500).json({ error: "Export failed on server." });
