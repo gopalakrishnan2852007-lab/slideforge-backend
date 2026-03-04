@@ -12,7 +12,7 @@ app.use(express.json({ limit: "50mb" }));
 // 🚀 HEALTH CHECK
 // ==========================================
 app.get("/", (req, res) => {
-  res.send("🚀 SlideForge God-Level Theme Engine Running");
+  res.send("🚀 SlideForge God-Level Engine Running");
 });
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -175,7 +175,7 @@ Format: { "script": ["Slide 1 speech...", "Slide 2 speech..."] }`;
 });
 
 // ==========================================
-// 👑 7. PPT RENDER ENGINE
+// 👑 7. PPT RENDER ENGINE (BASE64 ANTI-CORRUPTION FIX)
 // ==========================================
 app.post("/download-ppt", async (req, res) => {
   try {
@@ -196,6 +196,7 @@ app.post("/download-ppt", async (req, res) => {
     };
     const tConfig = THEMES[activeTheme];
 
+    // --- Cover Slide ---
     const cover = pptx.addSlide();
     cover.background = { fill: tConfig.bg };
     if (activeTheme === "modern") {
@@ -205,6 +206,7 @@ app.post("/download-ppt", async (req, res) => {
       cover.addText(safeTitle, { x: 1, y: 2.2, w: 8, h: 1.5, fontSize: 42, bold: true, color: tConfig.titleText, fontFace: tConfig.font, align: "center" });
     }
 
+    // --- Content Slides ---
     slides.forEach((slide, index) => {
       const s = pptx.addSlide();
       const headingText = `${slide.icon || "🔹"}  ${cleanText(slide.heading)}`; 
@@ -236,12 +238,14 @@ app.post("/download-ppt", async (req, res) => {
       }
     });
 
-    const buffer = await pptx.write("nodebuffer");
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
-    res.setHeader("Content-Disposition", `attachment; filename="${fileName}.pptx"`);
-    res.send(buffer);
+    // Write file as Base64 string to prevent network corruption
+    const base64File = await pptx.write("base64");
+    const fileName = safeTitle.replace(/[^a-z0-9]/gi, "_") || "Presentation";
+
+    res.json({ fileName: `${fileName}.pptx`, fileData: base64File });
   } catch (err) {
-    res.status(500).json({ error: "Export failed." });
+    console.error("Export Error:", err);
+    res.status(500).json({ error: "Export failed on server." });
   }
 });
 
